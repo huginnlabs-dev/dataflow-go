@@ -56,10 +56,10 @@ jobs:
 
       - name: verify tag matches SDKVersion in agent.go
         run: |
-          TAG="${GITHUB_REF_NAME}"
+          TAG="${GITHUB_REF_NAME#v}"
           SRC="$(grep -oE 'SDKVersion = "[^"]+"' agent.go | cut -d'"' -f2)"
           if [ "$TAG" != "$SRC" ]; then
-            echo "::error::tag $TAG != SDKVersion $SRC — bump SDKVersion in agent.go and re-tag"
+            echo "::error::tag $GITHUB_REF_NAME != SDKVersion $SRC — bump SDKVersion in agent.go and re-tag"
             exit 1
           fi
 
