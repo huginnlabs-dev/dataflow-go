@@ -58,10 +58,10 @@ func TestDeriveKeyIsDeterministic(t *testing.T) {
 func TestPackageOfFuncName(t *testing.T) {
 	cases := map[string]string{
 		"github.com/acme/shop/internal/users.Service.GetUser": "github.com/acme/shop/internal/users",
-		"main.main":                                          "main",
-		"net/http.(*Client).Do":                              "net/http",
-		"":                                                   "",
-		"bareFunc":                                           "",
+		"main.main":             "main",
+		"net/http.(*Client).Do": "net/http",
+		"":                      "",
+		"bareFunc":              "",
 	}
 	for in, want := range cases {
 		if got := packageOfFuncName(in); got != want {

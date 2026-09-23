@@ -12,9 +12,9 @@ import (
 const SDKVersion = "0.1.0"
 
 var (
-	agentOnce     sync.Once
-	agentAttrs    [][2]string
-	processStart  = time.Now()
+	agentOnce    sync.Once
+	agentAttrs   [][2]string
+	processStart = time.Now()
 )
 
 // agentInfo builds the host/process descriptor once per process: OS, arch,
