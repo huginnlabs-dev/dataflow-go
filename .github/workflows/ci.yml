@@ -1,0 +1,72 @@
+# Canonical CI for the standalone dataflow-go repository
+# (github.com/huginnlabs-dev/dataflow-go). This file travels with the SDK
+# when it is split out of the monorepo; the monorepo mirrors it in
+# .github/workflows/sdk-go.yml with path filters.
+#
+# Release = push a tag whose version matches SDKVersion in agent.go:
+#   git tag v0.1.0 && git push origin v0.1.0
+# The tag publishes the module through the Go module proxy.
+name: ci
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go: ["1.25.x", "stable"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          cache-dependency-path: go.sum
+
+      - name: gofmt (no diffs allowed)
+        run: test -z "$(gofmt -l .)"
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test -race -cover ./...
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+          cache-dependency-path: go.sum
+
+      - name: verify tag matches SDKVersion in agent.go
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          SRC="$(grep -oE 'SDKVersion = "[^"]+"' agent.go | cut -d'"' -f2)"
+          if [ "$TAG" != "$SRC" ]; then
+            echo "::error::tag $TAG != SDKVersion $SRC — bump SDKVersion in agent.go and re-tag"
+            exit 1
+          fi
+
+      - name: go test
+        run: go test ./...
+
+      - name: GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
