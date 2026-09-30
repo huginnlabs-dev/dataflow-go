@@ -42,6 +42,10 @@ func startSender(s *settings) {
 		s.cfg.Logger.Printf("dataflow: no API key configured; SDK stays passive (set DATAFLOW_API_KEY or Config.APIKey)")
 		return
 	}
+
+	// Report the service manifest (framework + dependency inventory) once;
+	// best-effort, independent of the tracing pipeline.
+	sendManifest(s)
 	p := &pipeline{
 		buf:  newEventBuffer(orDefault(s.cfg.BufferSize, 10000)),
 		wake: make(chan struct{}, 1),
