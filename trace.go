@@ -99,14 +99,19 @@ func (s *Span) SetData(key string, value any) *Span {
 	return s
 }
 
-// RecordError attaches an error to the span.
+// RecordError attaches an error to the span. The first error wins: later
+// calls are no-ops, so a specific error (e.g. a panic value recorded by
+// PanicMiddleware) is not clobbered by the generic "http 500" the HTTP
+// middleware adds on its way out.
 func (s *Span) RecordError(err error) *Span {
 	if err == nil {
 		return s
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.ev.ErrorMessage = err.Error()
+	if s.ev.ErrorMessage == "" {
+		s.ev.ErrorMessage = err.Error()
+	}
 	return s
 }
 

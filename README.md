@@ -90,6 +90,48 @@ skipped; results are deduplicated and capped at 1000 routes):
 | gorilla/mux | `r.HandleFunc("/x", h)` (→ `ANY`), chained `.Methods("GET", ...)` |
 | net/http | `mux.HandleFunc("GET /x", h)` (Go 1.22 patterns), plain path → `ANY` |
 
+## Panic capture
+
+Crashes become first-class errors: the panicking span is stamped with the
+panic value as its message, status 500, and an `error.stack` attribute
+(≤ 8 KB, top of the stack) — so panics land on the **Errors** page in the
+Dataflow dashboard, grouped and with their stack traces.
+
+For `net/http` (and anything built on it — chi, gorilla/mux, echo), wrap
+`PanicMiddleware` inside `Middleware`; a panic then answers a 500 and lands
+on the request's span:
+
+```go
+http.ListenAndServe(addr,
+    dataflow.Middleware(
+        dataflow.PanicMiddleware(mux)))
+```
+
+For background work and goroutines, wrap the risky call in `CapturePanic`.
+It records the crash on the span carried by `ctx` (or a standalone `panic`
+span when there is none) and then re-panics with the original value — it
+captures the evidence, it never swallows the crash:
+
+```go
+dataflow.CapturePanic(ctx, func() { process(job) })
+```
+
+With gin, register `gin.Recovery()` **before** `GinMiddleware()`:
+
+```go
+r := gin.New()
+r.Use(gin.Recovery())               // outer: answers the 500
+r.Use(dataflow.GinMiddleware())     // inner: records the panic, re-panics
+```
+
+In that order the panic reaches the SDK's deferred recover first, is
+recorded on the request span, and is re-raised for `gin.Recovery()` to turn
+into the 500. In the reverse order Recovery swallows the panic before the
+SDK sees it — requests still answer 500, but only a generic `http 500`
+lands on the span, without a stack. When the SDK is disabled
+(`DATAFLOW_DISABLED`), the middlewares still recover and answer 500 — they
+just record nothing.
+
 ## Versioning & compatibility
 
 Both the Dataflow server and this SDK follow [SemVer](https://semver.org).
@@ -113,6 +155,7 @@ constant in the source (`SDKVersion` in `agent.go`).
 
 | Dataflow server | sdk-go | Wire protocol | Status |
 |-----------------|--------|---------------|--------|
+| 0.4.x | 0.5.x | + `error.stack` panic capture metadata (stacks on the Errors page) | ✅ active |
 | 0.4.x | 0.3.x – 0.4.x | + `EVENT_TYPE_DB_QUERY` (SQL spans), `EVENT_TYPE_LLM_CALL`, `/api/v1/catalog` route scan | ✅ active |
 | 0.1.x – 0.3.x | 0.1.x – 0.2.x | gRPC `dataflow.v1` + REST ingest v1, OTLP `/v1/traces` | ✅ active |
 

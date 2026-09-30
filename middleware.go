@@ -89,6 +89,24 @@ func GinMiddleware() gin.HandlerFunc {
 		captureHeaders(span, c.Request)
 		captureBody(c.Request, span)
 
+		// Record panics before they unwind further. Register gin.Recovery
+		// BEFORE this middleware (r.Use(gin.Recovery(), dataflow.GinMiddleware()))
+		// so Recovery sits in an outer frame: a handler panic then hits our
+		// deferred recover first, gets recorded on the request span, and is
+		// re-raised for Recovery to turn into the 500. In the reverse order
+		// Recovery swallows the panic before we see it and only the generic
+		// "http 500" is recorded. We never write a response here — the
+		// re-panic hands control back to Recovery, avoiding double writes.
+		// The span is ended before re-panicking; without it the crash would
+		// skip the epilogue below and never ship.
+		defer func() {
+			if v := recover(); v != nil {
+				recordPanic(span, v)
+				span.End()
+				panic(v)
+			}
+		}()
+
 		// Expose the span so StartSpan/Trace calls inside handlers join the
 		// same trace.
 		c.Request = c.Request.WithContext(span.Context())
