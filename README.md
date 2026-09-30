@@ -58,7 +58,8 @@ constant in the source (`SDKVersion` in `agent.go`).
 
 | Dataflow server | sdk-go | Wire protocol | Status |
 |-----------------|--------|---------------|--------|
-| 0.1.x | 0.1.x | gRPC `dataflow.v1` + REST ingest v1, OTLP `/v1/traces` | ✅ active |
+| 0.4.x | 0.3.x | + `EVENT_TYPE_DB_QUERY` (SQL spans), `EVENT_TYPE_LLM_CALL` | ✅ active |
+| 0.1.x – 0.3.x | 0.1.x – 0.2.x | gRPC `dataflow.v1` + REST ingest v1, OTLP `/v1/traces` | ✅ active |
 
 Rules of thumb:
 
