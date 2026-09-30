@@ -35,6 +35,61 @@ go get github.com/huginnlabs-dev/dataflow-go
 Full SDK documentation, per-language pages and an agent-ready prompt live in
 the product docs (the `/docs` section of your Dataflow deployment).
 
+## Route scanning (dataflow-scan)
+
+`dataflow-scan` statically extracts the HTTP endpoints a Go service declares
+in its source — no build, no run — and posts them to the Dataflow server
+catalog (`POST /api/v1/catalog`), so routes show up in the dashboard even
+before the service ships its first trace.
+
+```sh
+go run github.com/huginnlabs-dev/dataflow-go/cmd/dataflow-scan@latest \
+  --url https://dataflow.example.com \
+  --api-key "$DATAFLOW_API_KEY" \
+  --service shop \
+  --dir ./cmd/shop
+```
+
+CI usage sketch (e.g. GitLab CI):
+
+```yaml
+scan:
+  stage: catalog
+  image: golang:1.25
+  script:
+    - go run github.com/huginnlabs-dev/dataflow-go/cmd/dataflow-scan@latest
+        --url "$DATAFLOW_HTTP_URL"
+        --api-key "$DATAFLOW_API_KEY"
+        --service "$CI_PROJECT_NAME"
+        --dir .
+```
+
+Flags mirror the SDK environment:
+
+| Flag | Default | Meaning |
+|------|---------|---------|
+| `--dir` | `.` | Go service directory to scan |
+| `--service` | `DATAFLOW_SERVICE_NAME`, then dir base name | service name in the catalog |
+| `--url` | `DATAFLOW_HTTP_URL`, then URL-form `DATAFLOW_ENDPOINT` | Dataflow HTTP base URL |
+| `--api-key` | `DATAFLOW_API_KEY` | project API key |
+| `--print` | off | print the routes as JSON and exit without posting |
+
+A bare `host:port` `DATAFLOW_ENDPOINT` is the gRPC ingest address with no
+derivable HTTP base — the upload is then skipped with exit code 1. Exit
+codes: `0` ok, `1` scan failure or skipped upload, `2` catalog POST rejected.
+
+Recognized registrations (literal string paths only; dynamic paths are
+skipped; results are deduplicated and capped at 1000 routes):
+
+| Framework | Patterns |
+|-----------|----------|
+| gin | `r.GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS(...)`, `Any`, `g := r.Group("/api")` prefixes |
+| echo | `e.GET/POST/...(...)`, `Any`, `g := e.Group("/api")` prefixes |
+| chi | `r.Get/Post/...(...)`, `r.Route("/api", func(r chi.Router) {...})` nesting |
+| fiber | `app.Get/Post/...(...)`, `All`, group prefixes |
+| gorilla/mux | `r.HandleFunc("/x", h)` (→ `ANY`), chained `.Methods("GET", ...)` |
+| net/http | `mux.HandleFunc("GET /x", h)` (Go 1.22 patterns), plain path → `ANY` |
+
 ## Versioning & compatibility
 
 Both the Dataflow server and this SDK follow [SemVer](https://semver.org).
@@ -58,7 +113,7 @@ constant in the source (`SDKVersion` in `agent.go`).
 
 | Dataflow server | sdk-go | Wire protocol | Status |
 |-----------------|--------|---------------|--------|
-| 0.4.x | 0.3.x | + `EVENT_TYPE_DB_QUERY` (SQL spans), `EVENT_TYPE_LLM_CALL` | ✅ active |
+| 0.4.x | 0.3.x – 0.4.x | + `EVENT_TYPE_DB_QUERY` (SQL spans), `EVENT_TYPE_LLM_CALL`, `/api/v1/catalog` route scan | ✅ active |
 | 0.1.x – 0.3.x | 0.1.x – 0.2.x | gRPC `dataflow.v1` + REST ingest v1, OTLP `/v1/traces` | ✅ active |
 
 Rules of thumb:
