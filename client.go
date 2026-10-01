@@ -46,6 +46,9 @@ func startSender(s *settings) {
 	// Report the service manifest (framework + dependency inventory) once;
 	// best-effort, independent of the tracing pipeline.
 	sendManifest(s)
+	// Turn on application log shipping over the REST endpoint (also
+	// best-effort; silently off without an HTTP base or API key).
+	startLogs(s)
 	p := &pipeline{
 		buf:  newEventBuffer(orDefault(s.cfg.BufferSize, 10000)),
 		wake: make(chan struct{}, 1),

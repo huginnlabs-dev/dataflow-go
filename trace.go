@@ -169,6 +169,10 @@ func Trace[T any](ctx context.Context, name string, fn func(ctx context.Context)
 		span.ev.CallerPackage = foreignCallerPackage(pkg, 2)
 		span.mu.Unlock()
 	}
+	// Ambient span for the callback's goroutine: ctx-free helpers (the log
+	// shippers) attach this span's trace/span ids while fn runs.
+	pushCurrentSpan(span)
+	defer popCurrentSpan()
 	val, err := fn(span.Context())
 	if err != nil {
 		span.RecordError(err)
@@ -185,6 +189,8 @@ func TraceVoid(ctx context.Context, name string, fn func(ctx context.Context) er
 		span.ev.CalleePackage = pkg
 		span.mu.Unlock()
 	}
+	pushCurrentSpan(span)
+	defer popCurrentSpan()
 	err := fn(span.Context())
 	if err != nil {
 		span.RecordError(err)

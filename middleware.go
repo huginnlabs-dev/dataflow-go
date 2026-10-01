@@ -45,6 +45,11 @@ func Middleware(next http.Handler) http.Handler {
 		captureHeaders(span, r)
 		captureBody(r, span)
 
+		// Ambient span on the handler's goroutine so ctx-free helpers (the
+		// log shippers) correlate with the request trace.
+		pushCurrentSpan(span)
+		defer popCurrentSpan()
+
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rec, r.WithContext(span.Context()))
 
@@ -88,6 +93,12 @@ func GinMiddleware() gin.HandlerFunc {
 		span.SetAttr("http.path", c.Request.URL.Path)
 		captureHeaders(span, c.Request)
 		captureBody(c.Request, span)
+
+		// Ambient span on the handler's goroutine so ctx-free helpers (the
+		// log shippers) correlate with the request trace. Registered before
+		// the panic defer below so the registry is unwound first.
+		pushCurrentSpan(span)
+		defer popCurrentSpan()
 
 		// Record panics before they unwind further. Register gin.Recovery
 		// BEFORE this middleware (r.Use(gin.Recovery(), dataflow.GinMiddleware()))

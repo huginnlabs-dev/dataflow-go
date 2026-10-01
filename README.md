@@ -132,6 +132,47 @@ lands on the span, without a stack. When the SDK is disabled
 (`DATAFLOW_DISABLED`), the middlewares still recover and answer 500 — they
 just record nothing.
 
+## Log capture
+
+The SDK ships your application logs to the Dataflow dashboard (**Logs**
+tab) and stamps every line with the current span's trace/span ids, so a log
+line shows up next to the trace it happened in.
+
+Four level helpers take a message plus optional fields (stringified,
+clamped to 50×512 like the server side):
+
+```go
+dataflow.Info("order placed", map[string]any{"order_id": order.ID})
+dataflow.Warn("cache miss", map[string]any{"key": key})
+dataflow.Error("payment declined", map[string]any{"reason": reason})
+dataflow.Debug("cache warm")
+dataflow.Logf("warn", "retry %d/%d for %s", attempt, max, op) // printf flavour
+```
+
+Trace correlation is automatic: inside a `dataflow.Trace` callback or an
+HTTP handler wrapped by `Middleware`/`GinMiddleware`, records carry the
+active trace/span ids; outside a trace they ship with empty ids.
+
+For `log/slog` users, swap the default logger and every record — including
+third-party code logging through `log/slog` — flows into Dataflow with
+attributes as fields:
+
+```go
+logger := slog.New(dataflow.NewSlogHandler())
+slog.SetDefault(logger)
+slog.Warn("token expired", "user_id", 42)
+```
+
+Shipping is batched and best-effort: lines buffer in-process (1024 cap,
+oldest dropped on overflow) and POST to `/api/v1/logs` every 500 ms or 50
+lines; a failed batch is retried once, then dropped — logging never blocks
+your application. `dataflow.FlushLogs()` ships the buffer synchronously
+(useful on shutdown). Log shipping reuses the manifest's HTTP base
+resolution: a URL-form `DATAFLOW_ENDPOINT` (or `DATAFLOW_HTTP_URL` for a
+bare gRPC `host:port`) is required — with no derivable HTTP base, logging
+stays silently off. When the SDK is disabled (`DATAFLOW_DISABLED`, or no
+API key) all helpers and the slog handler are no-ops.
+
 ## Versioning & compatibility
 
 Both the Dataflow server and this SDK follow [SemVer](https://semver.org).
@@ -155,6 +196,7 @@ constant in the source (`SDKVersion` in `agent.go`).
 
 | Dataflow server | sdk-go | Wire protocol | Status |
 |-----------------|--------|---------------|--------|
+| 0.5.x | 0.6.x | + REST `/api/v1/logs` application log shipping with trace correlation | ✅ active |
 | 0.4.x | 0.5.x | + `error.stack` panic capture metadata (stacks on the Errors page) | ✅ active |
 | 0.4.x | 0.3.x – 0.4.x | + `EVENT_TYPE_DB_QUERY` (SQL spans), `EVENT_TYPE_LLM_CALL`, `/api/v1/catalog` route scan | ✅ active |
 | 0.1.x – 0.3.x | 0.1.x – 0.2.x | gRPC `dataflow.v1` + REST ingest v1, OTLP `/v1/traces` | ✅ active |
