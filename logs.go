@@ -46,12 +46,16 @@ const (
 	maxLogFieldValue   = 512
 )
 
-// logRecord is one shipped application log line (wire shape of
+// LogRecord is one shipped application log line (wire shape of
 // POST /api/v1/logs entries).
-type logRecord struct {
-	Timestamp   int64             `json:"timestamp"`
-	Level       string            `json:"level"`
-	Message     string            `json:"message"`
+type LogRecord struct {
+	// Timestamp is the record time as unix milliseconds.
+	Timestamp int64 `json:"timestamp"`
+	// Level is one of debug|info|warn|error.
+	Level   string `json:"level"`
+	Message string `json:"message"`
+	// TraceID / SpanID carry the ids of the span active on the logging
+	// goroutine; both are empty outside a trace.
 	TraceID     string            `json:"trace_id"`
 	SpanID      string            `json:"span_id"`
 	ServiceName string            `json:"service_name"`
@@ -59,14 +63,14 @@ type logRecord struct {
 }
 
 type logBatch struct {
-	Logs []logRecord `json:"logs"`
+	Logs []LogRecord `json:"logs"`
 }
 
 // logPipeline buffers log lines and flushes them to the REST endpoint from
 // a background goroutine, independently of the gRPC trace stream.
 type logPipeline struct {
 	mu      sync.Mutex
-	pending []logRecord
+	pending []LogRecord
 	dropped atomic.Int64
 
 	signal chan struct{}
@@ -96,7 +100,7 @@ func startLogs(s *settings) {
 
 func newLogPipeline(base, apiKey string, insecure bool) *logPipeline {
 	p := &logPipeline{
-		pending:  make([]logRecord, 0, logBufferSize),
+		pending:  make([]LogRecord, 0, logBufferSize),
 		signal:   make(chan struct{}, 1),
 		stop:     make(chan struct{}),
 		done:     make(chan struct{}),
@@ -135,7 +139,7 @@ func (p *logPipeline) run() {
 // logLine buffers one record; a no-op when log shipping is off. Never
 // blocks and never panics: on overflow the oldest line is dropped and
 // counted.
-func logLine(rec logRecord) {
+func logLine(rec LogRecord) {
 	p := globalLogs.Load()
 	if p == nil {
 		return
@@ -160,11 +164,11 @@ func logLine(rec logRecord) {
 }
 
 // take swaps out the buffered lines under the lock.
-func (p *logPipeline) take() []logRecord {
+func (p *logPipeline) take() []LogRecord {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	recs := p.pending
-	p.pending = make([]logRecord, 0, logBufferSize)
+	p.pending = make([]LogRecord, 0, logBufferSize)
 	return recs
 }
 
@@ -188,7 +192,7 @@ func (p *logPipeline) flushNow() {
 }
 
 // post sends one batch; one retry on failure, then the batch is dropped.
-func (p *logPipeline) post(recs []logRecord) error {
+func (p *logPipeline) post(recs []LogRecord) error {
 	body, err := json.Marshal(logBatch{Logs: recs})
 	if err != nil {
 		return err // unreachable for string-only records
@@ -257,8 +261,8 @@ func logAt(level, msg string, fields []map[string]any) {
 
 // buildRecord stamps a log line with time, service and — when a trace is
 // active on the calling goroutine — the current span's ids.
-func buildRecord(level, msg string, fields []map[string]any) logRecord {
-	rec := logRecord{
+func buildRecord(level, msg string, fields []map[string]any) LogRecord {
+	rec := LogRecord{
 		Timestamp:   time.Now().UnixMilli(),
 		Level:       normalizeLevel(level),
 		Message:     truncateString(msg, maxLogMessageBytes),

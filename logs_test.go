@@ -25,10 +25,10 @@ func useTestLogs(t *testing.T, base string) *logPipeline {
 }
 
 // pendingLogs drains the test pipeline's buffered log lines.
-func pendingLogs(p *logPipeline) []logRecord {
+func pendingLogs(p *logPipeline) []LogRecord {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	out := make([]logRecord, len(p.pending))
+	out := make([]LogRecord, len(p.pending))
 	copy(out, p.pending)
 	return out
 }
@@ -36,7 +36,7 @@ func pendingLogs(p *logPipeline) []logRecord {
 type logServer struct {
 	srv     *httptest.Server
 	mu      sync.Mutex
-	batches [][]logRecord
+	batches [][]LogRecord
 	paths   []string
 	keys    []string
 	codes   []int
@@ -81,7 +81,7 @@ func (ls *logServer) total() int {
 
 // snapshot copies the recorded requests/batches under one lock so callers
 // never hold ls.mu while inspecting (sync.Mutex is not reentrant).
-func (ls *logServer) snapshot() (paths, keys []string, batches [][]logRecord) {
+func (ls *logServer) snapshot() (paths, keys []string, batches [][]LogRecord) {
 	ls.mu.Lock()
 	defer ls.mu.Unlock()
 	paths = append(paths, ls.paths...)

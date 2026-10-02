@@ -31,7 +31,7 @@ func TestStmtSummary(t *testing.T) {
 		"PRAGMA journal_mode=WAL":                                      "PRAGMA",
 	}
 	for q, want := range cases {
-		if got := stmtSummary(q); got != want {
+		if got := StmtSummary(q); got != want {
 			t.Errorf("stmtSummary(%q) = %q, want %q", q, got, want)
 		}
 	}

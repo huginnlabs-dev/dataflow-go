@@ -63,7 +63,7 @@ func (c *tracedConn) Prepare(query string) (driver.Stmt, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &tracedStmt{system: c.system, summary: stmtSummary(query), statement: clipStatement(query), base: stmt}, nil
+	return &tracedStmt{system: c.system, summary: StmtSummary(query), statement: clipStatement(query), base: stmt}, nil
 }
 
 func (c *tracedConn) Close() error { return c.base.Close() }
@@ -168,25 +168,42 @@ func namedToValues(args []driver.NamedValue) ([]driver.Value, error) {
 
 // startSQLSpan opens a DB_QUERY span; nil when tracing is disabled.
 func startSQLSpan(ctx context.Context, system, query string) *Span {
+	return StartDBSpan(ctx, StmtSummary(query), system, query)
+}
+
+func finishSQLSpan(span *Span, err error) { FinishDBSpan(span, err) }
+
+// StartDBSpan opens a DB_QUERY span for one database operation and returns
+// it for the caller to finish with FinishDBSpan. name is the short span
+// name (use StmtSummary for SQL statements, an uppercased command verb for
+// key-value stores), system the backend identifier recorded as db.system
+// ("postgres", "sqlite", "redis", …) and statement the operation text,
+// clipped and recorded as db.statement. The returned span is nil when the
+// SDK is disabled — FinishDBSpan accepts a nil span, so callers can ignore
+// that case.
+func StartDBSpan(ctx context.Context, name, system, statement string) *Span {
 	if !Enabled() {
 		return nil
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	span := StartSpan(ctx, stmtSummary(query))
+	span := StartSpan(ctx, name)
 	span.mu.Lock()
 	span.ev.Type = pb.EventType_EVENT_TYPE_DB_QUERY
 	span.ev.CalleePackage = system
 	span.mu.Unlock()
 	span.SetAttr("db.system", system)
-	if s := clipStatement(query); s != "" {
+	if s := clipStatement(statement); s != "" {
 		span.SetAttr("db.statement", s)
 	}
 	return span
 }
 
-func finishSQLSpan(span *Span, err error) {
+// FinishDBSpan records err (error message + status 500 when non-nil, 200
+// otherwise) and closes the span. A nil span — StartDBSpan with the SDK
+// disabled — is a no-op.
+func FinishDBSpan(span *Span, err error) {
 	if span == nil {
 		return
 	}
@@ -212,10 +229,12 @@ var (
 	stmtTableRe = regexp.MustCompile(`(?is)\b(?:FROM|INTO|UPDATE|TABLE|JOIN)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?[` + "`" + `"'\[]?([A-Za-z_][\w$.]*)`)
 )
 
-// stmtSummary renders a short human name for a statement: the verb plus
+// StmtSummary renders a short human name for a statement: the verb plus
 // the first table reference when one exists ("SELECT orders",
 // "INSERT users"); bare verbs and non-SQL fall back to the first word.
-func stmtSummary(query string) string {
+// Exported for integrations that name DB_QUERY spans the same way the
+// database/sql driver proxy does.
+func StmtSummary(query string) string {
 	one := strings.Join(strings.Fields(query), " ")
 	m := stmtVerbRe.FindStringSubmatch(one)
 	if m == nil {

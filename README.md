@@ -173,6 +173,36 @@ bare gRPC `host:port`) is required — with no derivable HTTP base, logging
 stays silently off. When the SDK is disabled (`DATAFLOW_DISABLED`, or no
 API key) all helpers and the slog handler are no-ops.
 
+## Integrations (contrib modules)
+
+Optional integrations ship as **separate Go modules under `contrib/`**, so
+their library never becomes a dependency of the SDK core — add the one you
+use, and the core stays dependency-free:
+
+| Module | Import | What it adds |
+|--------|--------|--------------|
+| [contrib/gorm](contrib/gorm) | `gormtrace` | GORM plugin — `DB_QUERY` spans for every query/exec/create/update/delete (`SELECT orders`, `db.system`, `db.statement`) |
+| [contrib/redis](contrib/redis) | `redistrace` | go-redis v9 hook — one `DB_QUERY` span per command (`GET`, `PIPELINE SET`), command text as the statement |
+| [contrib/zap](contrib/zap) | `zaptrace` | zap core (`zaptrace.Core()`, `Wrap`) — entries forwarded to the log pipeline with fields |
+| [contrib/zerolog](contrib/zerolog) | `zerologtrace` | zerolog hook (`Hook()`) — events forwarded to the log pipeline |
+
+```go
+import gormtrace "github.com/huginnlabs-dev/dataflow-go/contrib/gorm"
+
+db, _ := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+_ = gormtrace.Register(db) // every query now emits a DB_QUERY span
+```
+
+Each module has its own `go.mod` (requiring the SDK via a `replace ../..`)
+and its own README — they carry no effect on builds that don't import them.
+
+For custom instrumentations the SDK also exports the DB-span primitives the
+SQL driver proxy uses: `dataflow.StartDBSpan(ctx, name, system, statement)`
+opens a `DB_QUERY` span, `dataflow.FinishDBSpan(span, err)` records the
+error/status and closes it, and `dataflow.StmtSummary(sql)` renders the
+"verb + table" span name. Test suites can capture spans and log lines
+in-memory with `dataflow.CaptureEvents()` / `dataflow.CaptureLogs()`.
+
 ## Versioning & compatibility
 
 Both the Dataflow server and this SDK follow [SemVer](https://semver.org).
@@ -196,6 +226,7 @@ constant in the source (`SDKVersion` in `agent.go`).
 
 | Dataflow server | sdk-go | Wire protocol | Status |
 |-----------------|--------|---------------|--------|
+| 0.5.x | 0.7.x | + optional contrib modules (GORM/redis DB_QUERY spans, zap/zerolog log forwarding) — no wire change | ✅ active |
 | 0.5.x | 0.6.x | + REST `/api/v1/logs` application log shipping with trace correlation | ✅ active |
 | 0.4.x | 0.5.x | + `error.stack` panic capture metadata (stacks on the Errors page) | ✅ active |
 | 0.4.x | 0.3.x – 0.4.x | + `EVENT_TYPE_DB_QUERY` (SQL spans), `EVENT_TYPE_LLM_CALL`, `/api/v1/catalog` route scan | ✅ active |
