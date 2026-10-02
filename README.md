@@ -226,6 +226,7 @@ constant in the source (`SDKVersion` in `agent.go`).
 
 | Dataflow server | sdk-go | Wire protocol | Status |
 |-----------------|--------|---------------|--------|
+| 0.19.x | 0.8.x | + late activation: an explicit `Configure` with a key revives a passively-started SDK (no wire change) | ✅ active |
 | 0.5.x | 0.7.x | + optional contrib modules (GORM/redis DB_QUERY spans, zap/zerolog log forwarding) — no wire change | ✅ active |
 | 0.5.x | 0.6.x | + REST `/api/v1/logs` application log shipping with trace correlation | ✅ active |
 | 0.4.x | 0.5.x | + `error.stack` panic capture metadata (stacks on the Errors page) | ✅ active |

@@ -137,6 +137,67 @@ func GinMiddleware() gin.HandlerFunc {
 	}
 }
 
+// GinMiddlewareNoData is the privacy-hardened flavour of GinMiddleware:
+// request headers and body excerpts are never captured — spans carry route,
+// method, status and timing only. This is what a service instrumenting
+// ITSELF uses (auth bodies must not land in telemetry) and what the skip
+// callback is for: return true to suppress span creation entirely, so the
+// instrumentation never observes its own write path — the structural guard
+// against self-telemetry generating self-telemetry. gin.Recovery must stay
+// registered BEFORE this middleware (same defer contract as GinMiddleware).
+func GinMiddlewareNoData(skip func(r *http.Request) bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !Enabled() || (skip != nil && skip(c.Request)) {
+			c.Next()
+			return
+		}
+		span := StartSpan(c.Request.Context(), c.Request.Method+" "+c.Request.URL.Path)
+		span.mu.Lock()
+		span.ev.Type = pb.EventType_EVENT_TYPE_HTTP_SERVER
+		if incoming := c.Request.Header.Get("X-Dataflow-Trace-Id"); incoming != "" {
+			span.ev.TraceId = incoming
+		}
+		span.mu.Unlock()
+		stampAgent(span)
+		if route := c.FullPath(); route != "" {
+			span.mu.Lock()
+			span.ev.Name = c.Request.Method + " " + route
+			span.mu.Unlock()
+			span.SetAttr("http.route", route)
+		}
+		span.SetAttr("http.method", c.Request.Method)
+
+		// Ambient span on the handler's goroutine so ctx-free helpers (the
+		// log shippers) correlate with the request trace. Registered before
+		// the panic defer below so the registry is unwound first.
+		pushCurrentSpan(span)
+		defer popCurrentSpan()
+
+		defer func() {
+			if v := recover(); v != nil {
+				recordPanic(span, v)
+				span.End()
+				panic(v)
+			}
+		}()
+
+		c.Request = c.Request.WithContext(span.Context())
+		c.Next()
+
+		status := c.Writer.Status()
+		span.SetStatus(int32(status))
+		span.SetAttr("http.status_code", strconv.Itoa(status))
+		span.SetAttr("http.response_bytes", strconv.Itoa(c.Writer.Size()))
+		switch {
+		case len(c.Errors) > 0:
+			span.RecordError(errString(c.Errors.String()))
+		case status >= 500:
+			span.RecordError(errString("http " + strconv.Itoa(status)))
+		}
+		span.End()
+	}
+}
+
 type statusRecorder struct {
 	http.ResponseWriter
 	status int

@@ -9,7 +9,7 @@ import (
 )
 
 // SDKVersion is stamped into every service's agent metadata.
-const SDKVersion = "0.7.0"
+const SDKVersion = "0.8.0"
 
 var (
 	agentOnce    sync.Once

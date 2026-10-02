@@ -71,16 +71,28 @@ type settings struct {
 var (
 	configured atomic.Pointer[settings]
 	active     atomic.Bool
-	startOnce  sync.Once
+	startMu    sync.Mutex
+	started    bool
 )
 
 // Configure applies cfg and starts the SDK. Safe to call multiple times;
 // the last configuration wins. Called implicitly by the package init with
 // values from DATAFLOW_* environment variables.
+//
+// A process that imports the SDK before configuring it (the Dataflow server
+// itself is one: the package init runs with no DATAFLOW_* variables, and
+// main() configures afterwards) consumes its implicit start passively. The
+// first later Configure that carries a key revives the pipeline, so an
+// explicit main()-time configuration always wins over the empty env.
 func Configure(cfg Config) {
 	s := resolve(cfg)
 	configured.Store(s)
-	startOnce.Do(func() { startSender(s) })
+	startMu.Lock()
+	if !started || globalPipeline.Load() == nil {
+		started = true
+		startSender(s)
+	}
+	startMu.Unlock()
 	active.Store(true)
 }
 
