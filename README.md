@@ -241,3 +241,15 @@ Rules of thumb:
   major appears on either side.
 - The SDK stamps its version into every trace (`agent.sdk` metadata), so a
   deployed fleet is auditable from the dashboard.
+
+## Performance
+
+Measured overhead of running with the SDK attached (one span per request,
+exported live to a Dataflow server): **≈ 6–7% throughput** on a ~77 µs
+CPU-bound HTTP endpoint (≈ 4–5 µs per request), p95/p99 unaffected or
+better than the uninstrumented baseline — and about on par with the
+equivalent OpenTelemetry setup measured side by side.
+
+Methodology, raw numbers and the OTEL comparison:
+BENCHMARKS.md (repo root of the Dataflow monorepo) in the Dataflow monorepo root
+(`bench/go` — reproduce with the shared load driver).
