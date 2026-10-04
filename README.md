@@ -250,6 +250,14 @@ CPU-bound HTTP endpoint (≈ 4–5 µs per request), p95/p99 unaffected or
 better than the uninstrumented baseline — and about on par with the
 equivalent OpenTelemetry setup measured side by side.
 
-Methodology, raw numbers and the OTEL comparison:
-BENCHMARKS.md (repo root of the Dataflow monorepo) in the Dataflow monorepo root
-(`bench/go` — reproduce with the shared load driver).
+**Benchmark** (same ~1 ms CPU endpoint, 16 workers x 60 s, spans exported
+live to a running Dataflow server, two rounds — spread < 1%):
+
+| Config | Throughput | p50 | p95 | p99 |
+|--------|-----------|-----|-----|-----|
+| no instrumentation | 13 029 rps | 1.07 ms | 2.28 ms | 3.13 ms |
+| **dataflow-go** | 12 247 rps | 1.15 ms | 1.85 ms | 2.64 ms |
+| OpenTelemetry | 13 939 rps | 1.07 ms | 1.87 ms | 2.73 ms |
+
+≈ 6–7% throughput cost at full export fidelity (≈ 4–5 µs per request);
+p95/p99 unaffected or better. Harness: `bench/go` in the Dataflow monorepo.
