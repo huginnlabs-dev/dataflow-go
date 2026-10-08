@@ -1,4 +1,11 @@
+<div align="center">
+
+  <img src="assets/mark.svg" width="72" alt="Dataflow mark" />
+
 # dataflow-go — HuginnLabs Dataflow SDK for Go
+
+</div>
+
 
 One blank import instruments a Go service for [HuginnLabs Dataflow](https://github.com/huginnlabs-dev):
 HTTP entry points (gin / net/http), package-boundary function calls and outgoing
